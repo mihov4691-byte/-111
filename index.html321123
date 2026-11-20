@@ -1,0 +1,107 @@
+html
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Чат Приложение</title>
+  <script src="https://tailwindcss.com"></script>
+  <script src="https://jsdelivr.net"></script>
+</head>
+<body class="bg-gray-900 text-white h-screen flex flex-col">
+
+  <!-- Екран за вход -->
+  <div id="login-screen" class="flex h-screen items-center justify-center p-4">
+    <form id="login-form" class="w-full max-w-sm rounded-2xl bg-gray-800 p-6 shadow-xl">
+      <h1 class="mb-4 text-center text-2xl font-bold">💬 Влез в чата</h1>
+      <input id="username-input" type="text" placeholder="Твоето име..." required
+        class="mb-4 w-full rounded-xl bg-gray-700 p-3 text-white outline-none focus:ring-2 focus:ring-blue-500" />
+      <button type="submit"
+        class="w-full rounded-xl bg-blue-600 py-3 font-semibold hover:bg-blue-700">
+        Продължи
+      </button>
+    </form>
+  </div>
+
+  <!-- Чат екран -->
+  <div id="chat-screen" class="hidden flex-col h-screen">
+    <header class="flex items-center justify-between border-b border-gray-800 bg-gray-950 px-4 py-3">
+      <h1 class="text-lg font-bold">💬 Общ Чат</h1>
+      <span id="display-username" class="rounded-full bg-gray-800 px-3 py-1 text-xs text-gray-300"></span>
+    </header>
+
+    <div id="messages-box" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
+
+    <form id="message-form" class="flex gap-2 border-t border-gray-800 bg-gray-950 p-3">
+      <input id="message-input" type="text" placeholder="Напиши съобщение..."
+        class="flex-1 rounded-full bg-gray-800 px-4 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500" />
+      <button type="submit"
+        class="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold hover:bg-blue-700">
+        Изпрати
+      </button>
+    </form>
+  </div>
+
+  <script>
+    // ПОПЪЛНИ СВОИТЕ ДАННИ ОТ SUPABASE ТУК:
+    const SUPABASE_URL = 'ПОСТАВИ_СВОЯ_PROJECT_URL_ТУК';
+    const SUPABASE_ANON_KEY = 'ПОСТАВИ_СВОЯ_ANON_KEY_ТУК';
+
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let currentUser = '';
+
+    const loginScreen = document.getElementById('login-screen');
+    const chatScreen = document.getElementById('chat-screen');
+    const messagesBox = document.getElementById('messages-box');
+
+    document.getElementById('login-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = document.getElementById('username-input').value.trim();
+      if (!val) return;
+      currentUser = val;
+      document.getElementById('display-username').textContent = '👤 ' + currentUser;
+      loginScreen.classList.add('hidden');
+      chatScreen.classList.remove('hidden');
+      chatScreen.classList.add('flex');
+      loadMessages();
+      subscribeRealtime();
+    });
+
+    function addMessageToUI(msg) {
+      const isMe = msg.username === currentUser;
+      const wrapper = document.createElement('div');
+      wrapper.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'}`;
+      wrapper.innerHTML = `
+        <span class="mb-1 px-1 text-xs text-gray-400">${msg.username}</span>
+        <div class="max-w-xs rounded-2xl px-4 py-2 text-sm ${
+          isMe ? 'rounded-br-none bg-blue-600 text-white' : 'rounded-bl-none bg-gray-800 text-gray-100'
+        }">${msg.content}</div>
+      `;
+      messagesBox.appendChild(wrapper);
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+    }
+
+    async function loadMessages() {
+      const { data } = await db.from('messages').select('*').order('created_at', { ascending: true });
+      if (data) data.forEach(addMessageToUI);
+    }
+
+    function subscribeRealtime() {
+      db.channel('realtime-messages')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+          addMessageToUI(payload.new);
+        })
+        .subscribe();
+    }
+
+    document.getElementById('message-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('message-input');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      await db.from('messages').insert([{ username: currentUser, content: text }]);
+    });
+  </script>
+</body>
+</html>
